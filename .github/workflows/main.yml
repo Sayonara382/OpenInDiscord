@@ -55,11 +55,16 @@ jobs:
         if: github.event.inputs.add_extension != 'false'
         run: |
           cd OpenInDiscord
+          
+          # Clean any previous builds
+          rm -rf build/
+          
+          echo "Starting build process..."
           xcodebuild build \
             -target "OpenInDiscord Extension" \
             -configuration Release \
             -sdk iphoneos \
-            CONFIGURATION_BUILD_DIR="build" \
+            CONFIGURATION_BUILD_DIR="$PWD/build" \
             PRODUCT_NAME="OpenInDiscord" \
             PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
             PRODUCT_MODULE_NAME="OpenInDiscordExt" \
@@ -69,26 +74,49 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO | xcbeautify
+          
+          echo "Build completed. Checking build directory:"
+          ls -la build/ || echo "Build directory not created"
 
       # Step 6: Locate and Copy Extension
       - name: Locate and Copy Extension
         if: github.event.inputs.add_extension != 'false'
         run: |
           cd OpenInDiscord
-          # Find the built .appex file
-          APPEX_PATH=$(find ./build -name "*.appex" -type d | head -1)
+          
+          # List the build directory contents for debugging
+          echo "Build directory contents:"
+          ls -la build/ || echo "Build directory not found at ./build"
+          
+          # Try multiple potential locations for the .appex file
+          APPEX_PATH=""
+          
+          # Check in build directory
+          if [ -d "./build" ]; then
+            APPEX_PATH=$(find ./build -name "*.appex" -type d | head -1)
+          fi
+          
+          # If not found in build, check in current directory recursively
+          if [ -z "$APPEX_PATH" ]; then
+            APPEX_PATH=$(find . -name "*.appex" -type d | head -1)
+          fi
+          
           echo "Found extension at: $APPEX_PATH"
           
           # Create output directory
           mkdir -p ../output
           
           # Copy the .appex bundle
-          if [ -n "$APPEX_PATH" ]; then
+          if [ -n "$APPEX_PATH" ] && [ -d "$APPEX_PATH" ]; then
             cp -R "$APPEX_PATH" ../output/
             echo "Extension copied to output directory"
             ls -la ../output/
           else
             echo "Error: Could not find .appex file"
+            echo "Searching all directories for debugging:"
+            find . -name "*.appex" -type d || echo "No .appex files found anywhere"
+            echo "All build artifacts:"
+            find . -name "*" -type f | grep -E "\.(app|appex|framework)$" || echo "No build artifacts found"
             exit 1
           fi
 
