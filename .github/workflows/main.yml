@@ -2,11 +2,9 @@ name: Build OpenInDiscord Tweak
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -18,29 +16,23 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Homebrew
-      - name: Install Homebrew
-        run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          echo "/opt/homebrew/bin" >> $GITHUB_PATH
-
-      # Step 3: Install Theos dependencies
+      # Step 2: Install Dependencies
       - name: Install Dependencies
         run: |
-          brew install make ldid git perl
-          xcode-select --install || true  # Install Xcode command-line tools if not present
+          brew install make ldid perl
 
-      # Step 4: Install Theos
+      # Step 3: Install Theos
       - name: Install Theos
         run: |
           export THEOS=~/theos
           git clone --recursive https://github.com/theos/theos.git $THEOS
           echo "$THEOS/bin" >> $GITHUB_PATH
 
-      # Step 5: Set up iOS SDK
+      # Step 4: Set up iOS SDK
       - name: Set up iOS SDK
         run: |
-          SDK_VERSION="17.2"  # Adjust to your target iOS version
+          export THEOS=~/theos
+          SDK_VERSION="17.2"
           SDK_PATH="$THEOS/sdks/iPhoneOS${SDK_VERSION}.sdk"
           if [ ! -d "$SDK_PATH" ]; then
             curl -L -o sdk.tar.xz "https://github.com/theos/sdks/releases/download/latest/iPhoneOS${SDK_VERSION}.sdk.tar.xz"
@@ -48,15 +40,15 @@ jobs:
             tar -C $THEOS/sdks -xJf sdk.tar.xz
           fi
 
-      # Step 6: Build and package the tweak
+      # Step 5: Build and package the tweak
       - name: Build and Package Tweak
         env:
           THEOS: ~/theos
         run: |
           export PATH="$THEOS/bin:$PATH"
-          make package FINALPACKAGE=1
+          make clean package FINALPACKAGE=1
 
-      # Step 7: Upload the .deb file as an artifact
+      # Step 6: Upload the .deb file as an artifact
       - name: Upload .deb Artifact
         uses: actions/upload-artifact@v4
         with:
