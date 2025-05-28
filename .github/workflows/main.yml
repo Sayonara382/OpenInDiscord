@@ -35,7 +35,7 @@ jobs:
           SDK_VERSION="16.5"
           SDK_PATH="$THEOS/sdks/iPhoneOS${SDK_VERSION}.sdk"
           if [ ! -d "$SDK_PATH" ]; then
-            curl -L -o sdk.tar.xz "https://github.com/theos/sdks/releases/download/SDK-Release-1/iPhoneOS16.5.sdk.tar.xz"
+            curl -L -o sdk.tar.xz "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz"
             mkdir -p $THEOS/sdks
             tar -C $THEOS/sdks -xJf sdk.tar.xz
           fi
