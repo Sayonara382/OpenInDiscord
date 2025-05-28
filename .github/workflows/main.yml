@@ -6,20 +6,16 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      add_extension:
+        description: 'Build Safari Extension'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   build-appex:
     runs-on: macos-15
-    strategy:
-      matrix:
-        platform: [iOS, macOS]
-        include:
-          - platform: iOS
-            destination: "generic/platform=iOS"
-            output_suffix: "ios"
-          - platform: macOS
-            destination: "generic/platform=macOS"
-            output_suffix: "macos"
 
     steps:
       # Step 1: Check out the repository
@@ -48,64 +44,81 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # Step 4: Build the Safari Web Extension (.appex)
-      - name: Build Safari Extension for ${{ matrix.platform }}
+      # Step 4: Install xcbeautify for better output formatting
+      - name: Install xcbeautify
+        if: github.event.inputs.add_extension != 'false'
         run: |
-          xcodebuild \
-            -project OpenInDiscord.xcodeproj \
-            -scheme "OpenInDiscord Extension" \
+          brew install xcbeautify
+
+      # Step 5: Build Safari Extension
+      - name: Build Safari Extension
+        if: github.event.inputs.add_extension != 'false'
+        run: |
+          cd OpenInDiscord
+          xcodebuild build \
+            -target "OpenInDiscord Extension" \
             -configuration Release \
-            -destination "${{ matrix.destination }}" \
-            -derivedDataPath ./build \
-            clean build \
+            -sdk iphoneos \
+            CONFIGURATION_BUILD_DIR="build" \
+            PRODUCT_NAME="OpenInDiscord" \
+            PRODUCT_BUNDLE_IDENTIFIER="com.hammerandchisel.discord.OpenInDiscord" \
+            PRODUCT_MODULE_NAME="OpenInDiscordExt" \
+            SKIP_INSTALL=NO \
+            DEVELOPMENT_TEAM="" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO | xcbeautify
 
-      # Step 5: Find and copy the built .appex file
+      # Step 6: Locate and Copy Extension
       - name: Locate and Copy Extension
+        if: github.event.inputs.add_extension != 'false'
         run: |
+          cd OpenInDiscord
           # Find the built .appex file
           APPEX_PATH=$(find ./build -name "*.appex" -type d | head -1)
           echo "Found extension at: $APPEX_PATH"
           
           # Create output directory
-          mkdir -p ./output
+          mkdir -p ../output
           
           # Copy the .appex bundle
           if [ -n "$APPEX_PATH" ]; then
-            cp -R "$APPEX_PATH" ./output/
+            cp -R "$APPEX_PATH" ../output/
             echo "Extension copied to output directory"
-            ls -la ./output/
+            ls -la ../output/
           else
             echo "Error: Could not find .appex file"
             exit 1
           fi
 
-      # Step 6: Create a zip archive of the extension
+      # Step 7: Create Extension Archive
       - name: Create Extension Archive
+        if: github.event.inputs.add_extension != 'false'
         run: |
           cd ./output
           APPEX_NAME=$(ls *.appex | head -1)
-          ARCHIVE_NAME="OpenInDiscord-Extension-${{ matrix.output_suffix }}.zip"
+          ARCHIVE_NAME="OpenInDiscord-Extension.zip"
           zip -r "$ARCHIVE_NAME" "$APPEX_NAME"
           echo "Created archive: $ARCHIVE_NAME"
           ls -la
 
-      # Step 7: Upload the extension as an artifact
+      # Step 8: Upload Extension Artifact
       - name: Upload Extension Artifact
+        if: github.event.inputs.add_extension != 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: openindiscord-safari-extension-${{ matrix.output_suffix }}
+          name: openindiscord-safari-extension
           path: |
             ./output/*.appex
             ./output/*.zip
           if-no-files-found: error
 
-      # Step 8: Show build summary
+      # Step 9: Build Summary
       - name: Build Summary
+        if: github.event.inputs.add_extension != 'false'
         run: |
-          echo "=== Build Summary for ${{ matrix.platform }} ==="
+          echo "=== Build Summary ==="
           echo "✅ Safari Web Extension built successfully"
           echo "📦 Extension files:"
           find ./output -type f -name "*.appex" -o -name "*.zip" | while read file; do
