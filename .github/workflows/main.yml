@@ -27,20 +27,36 @@ jobs:
       # Step 3: Install Theos dependencies
       - name: Install Dependencies
         run: |
-          brew install make ldid
+          brew install make ldid git perl
+          xcode-select --install || true  # Install Xcode command-line tools if not present
 
       # Step 4: Install Theos
       - name: Install Theos
         run: |
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          export THEOS=~/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
           echo "$THEOS/bin" >> $GITHUB_PATH
 
-      # Step 5: Build the tweak and package as .deb
-      - name: Build and Package Tweak
+      # Step 5: Set up iOS SDK
+      - name: Set up iOS SDK
         run: |
-          make package
+          SDK_VERSION="17.2"  # Adjust to your target iOS version
+          SDK_PATH="$THEOS/sdks/iPhoneOS${SDK_VERSION}.sdk"
+          if [ ! -d "$SDK_PATH" ]; then
+            curl -L -o sdk.tar.xz "https://github.com/theos/sdks/releases/download/latest/iPhoneOS${SDK_VERSION}.sdk.tar.xz"
+            mkdir -p $THEOS/sdks
+            tar -C $THEOS/sdks -xJf sdk.tar.xz
+          fi
 
-      # Step 6: Upload the .deb file as an artifact
+      # Step 6: Build and package the tweak
+      - name: Build and Package Tweak
+        env:
+          THEOS: ~/theos
+        run: |
+          export PATH="$THEOS/bin:$PATH"
+          make package FINALPACKAGE=1
+
+      # Step 7: Upload the .deb file as an artifact
       - name: Upload .deb Artifact
         uses: actions/upload-artifact@v4
         with:
