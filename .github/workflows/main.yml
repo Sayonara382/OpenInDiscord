@@ -1,4 +1,4 @@
-name: Build OpenInDiscord Tweak
+name: Build OpenInDiscord Safari Extension
 
 on:
   push:
@@ -8,50 +8,94 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-appex:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        platform: [iOS, macOS]
+        include:
+          - platform: iOS
+            destination: "generic/platform=iOS"
+            output_suffix: "ios"
+          - platform: macOS
+            destination: "generic/platform=macOS"
+            output_suffix: "macos"
 
     steps:
       # Step 1: Check out the repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Install Dependencies
-      - name: Install Dependencies
-        run: |
-          brew install make ldid perl
+      # Step 2: Set up Xcode
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      # Step 3: Install Theos
-      - name: Install Theos
+      # Step 3: Show Xcode and Swift versions
+      - name: Show Xcode Version
         run: |
-          export THEOS=~/theos
-          git clone --recursive https://github.com/theos/theos.git $THEOS
-          echo "$THEOS/bin" >> $GITHUB_PATH
+          xcodebuild -version
+          swift --version
 
-      # Step 4: Set up iOS SDK
-      - name: Set up iOS SDK
+      # Step 4: Build the Safari Web Extension (.appex)
+      - name: Build Safari Extension for ${{ matrix.platform }}
         run: |
-          export THEOS=~/theos
-          SDK_VERSION="16.5"
-          SDK_PATH="$THEOS/sdks/iPhoneOS${SDK_VERSION}.sdk"
-          if [ ! -d "$SDK_PATH" ]; then
-            curl -L -o sdk.tar.xz "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz"
-            mkdir -p $THEOS/sdks
-            tar -C $THEOS/sdks -xJf sdk.tar.xz
+          xcodebuild \
+            -project OpenInDiscord.xcodeproj \
+            -scheme "OpenInDiscord Extension" \
+            -configuration Release \
+            -destination "${{ matrix.destination }}" \
+            -derivedDataPath ./build \
+            clean build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Step 5: Find and copy the built .appex file
+      - name: Locate and Copy Extension
+        run: |
+          # Find the built .appex file
+          APPEX_PATH=$(find ./build -name "*.appex" -type d | head -1)
+          echo "Found extension at: $APPEX_PATH"
+          
+          # Create output directory
+          mkdir -p ./output
+          
+          # Copy the .appex bundle
+          if [ -n "$APPEX_PATH" ]; then
+            cp -R "$APPEX_PATH" ./output/
+            echo "Extension copied to output directory"
+            ls -la ./output/
+          else
+            echo "Error: Could not find .appex file"
+            exit 1
           fi
 
-      # Step 5: Build and package the tweak
-      - name: Build and Package Tweak
-        env:
-          THEOS: ~/theos
+      # Step 6: Create a zip archive of the extension
+      - name: Create Extension Archive
         run: |
-          export PATH="$THEOS/bin:$PATH"
-          make package FINALPACKAGE=1
+          cd ./output
+          APPEX_NAME=$(ls *.appex | head -1)
+          ARCHIVE_NAME="OpenInDiscord-Extension-${{ matrix.output_suffix }}.zip"
+          zip -r "$ARCHIVE_NAME" "$APPEX_NAME"
+          echo "Created archive: $ARCHIVE_NAME"
+          ls -la
 
-      # Step 6: Upload the .deb file as an artifact
-      - name: Upload .deb Artifact
+      # Step 7: Upload the extension as an artifact
+      - name: Upload Extension Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openindiscord-deb
-          path: packages/*.deb
+          name: openindiscord-safari-extension-${{ matrix.output_suffix }}
+          path: |
+            ./output/*.appex
+            ./output/*.zip
           if-no-files-found: error
+
+      # Step 8: Show build summary
+      - name: Build Summary
+        run: |
+          echo "=== Build Summary for ${{ matrix.platform }} ==="
+          echo "✅ Safari Web Extension built successfully"
+          echo "📦 Extension files:"
+          find ./output -type f -name "*.appex" -o -name "*.zip" | while read file; do
+            echo "   - $(basename "$file") ($(du -h "$file" | cut -f1))"
+          done 
